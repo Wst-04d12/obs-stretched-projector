@@ -14,7 +14,7 @@ static void MsgErr(const char* prefix) {
     MessageBoxA(NULL, buf, "osp", MB_OK);
 }
 
-static void* LocateFunction(const char* funcName, const char* const module) {
+static void* LocateFunction(const char* funcName, const char* module) {
 
     void* ret = NULL;
     const static HANDLE sSymSession = 0x1124112411241124;
@@ -64,62 +64,48 @@ static void* LocateFunction(const char* funcName, const char* const module) {
 
 }
 
-
-static unsigned char op[64];
-
-static unsigned char bBackedUp = FALSE;
-
 static ptrdiff_t pBase = 'Myon';
 
-const static ptrdiff_t wSize = 0x23;
+static uintptr_t pJ =    'Myon';
+
+static unsigned char b_disp[4] = {'M', 'y', 'o', 'n'};
 
 __declspec(dllexport) void projector_patch_enable() {
 
-    if (bBackedUp) goto w;
-
-    for (unsigned char offset = 0; offset < wSize; ++offset) {
-        op[offset] = *(unsigned char*)(pBase + offset);
-    }
-
-    bBackedUp = TRUE;
-
-    w:
-
     DWORD old;
-    VirtualProtect(pBase, wSize, PAGE_EXECUTE_READWRITE, &old);
 
-    for (unsigned char offset = 0; offset < wSize; ++offset) {
-        ((char*)pBase)[offset] = 0x90;
-    }
+    //overwrite instruction at patch point from `call qword ptr [&gs_set_viewport]` to `jmp qword ptr [jumper]`
 
-    //31 C9 31 D2 45 89 E8 45 89 E1
-    *(UINT64*)pBase = 0x45e88945d231c931;
-    *(WORD*)(pBase + 8) = 0xe189;
+    VirtualProtect(pBase, 6, PAGE_EXECUTE_READWRITE, &old);
 
+    *(unsigned char*)(pBase + 1) = 0x25; //call -> jmp
 
-    FlushInstructionCache(GetCurrentProcess(), pBase, wSize);
+    *(int*)(pBase + 2) = (uintptr_t)pJ - (pBase + 6); //[&gs_set_viewport] -> [jumper]
 
-    VirtualProtect(pBase, wSize, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), pBase, 6);
+
+    VirtualProtect(pBase, 6, old, &old);
 
 }
 
 __declspec(dllexport) void projector_patch_disable() {
 
     DWORD old;
-    VirtualProtect(pBase, wSize, PAGE_EXECUTE_READWRITE, &old);
 
-    for (unsigned char offset = 0; offset < wSize; ++offset) {
-        ((char*)pBase)[offset] = op[offset];
-    }
+    VirtualProtect(pBase, 6, PAGE_EXECUTE_READWRITE, &old);
 
-    FlushInstructionCache(GetCurrentProcess(), pBase, wSize);
+    *(unsigned char*)(pBase + 1) = 0x15;
 
-    VirtualProtect(pBase, wSize, old, &old);
+    *(int*)(pBase + 2) = *(int*)b_disp;
+
+    FlushInstructionCache(GetCurrentProcess(), pBase, 6);
+
+    VirtualProtect(pBase, 6, old, &old);
 
 }
 
 static unsigned char mem[16];
-static unsigned char lop[32] = {0x31, 0xC9, 0x31, 0xD2, 0x45, 0x89, 0xE8, 0x45, 0x89, 0xE1, 0xFF, 0x15};
+static unsigned char op[32] = {0x31, 0xC9, 0x31, 0xD2, 0x45, 0x89, 0xE8, 0x45, 0x89, 0xE1, 0xFF, 0x15};
 
 __declspec(dllexport) uintptr_t init(void) {
 
@@ -149,37 +135,28 @@ __declspec(dllexport) uintptr_t init(void) {
     DWORD old;
     VirtualProtect(pj, 8, PAGE_READWRITE, &old);
 
-    *pj = lop;
+    *pj = op;
 
     VirtualProtect(pj, 8, old, &old);
 
-    //overwrite instruction at patch point from `call qword ptr [&gs_set_viewport]` to `jmp qword ptr [jumper]`
-
-    VirtualProtect(pBase, 6, PAGE_EXECUTE_READWRITE, &old);
-
-    *(unsigned char*)(pBase + 1) = 0x25; //call -> jmp
-
-    *(int*)(pBase + 2) = (uintptr_t)pj - (pBase + 6); //[&gs_set_viewport] -> [jumper]
-
-    FlushInstructionCache(GetCurrentProcess(), pBase, 6);
-
-    VirtualProtect(pBase, 6, old, &old);
-
     *(uintptr_t*)mem = gs_set_viewport;
     
-    *(INT32*)(lop + 12) = mem - (lop + 16);
+    *(INT32*)(op + 12) = mem - (op + 16);
 
     *((uintptr_t*)mem + 1) = pBase + 6;
 
-    *(WORD*)(lop + 16) = 0x25FF;
+    *(WORD*)(op + 16) = 0x25FF;
 
-    *(INT32*)(lop + 18) = mem + 8 - (lop + 22);
+    *(INT32*)(op + 18) = mem + 8 - (op + 22);
 
-    VirtualProtect(lop, sizeof lop, PAGE_EXECUTE_READWRITE, &old);
+    VirtualProtect(op, sizeof op, PAGE_EXECUTE_READWRITE, &old);
 
-    return pBase;
-    /*return pBase = (uintptr_t)LocateFunction("OBSProjector::OBSRender", NULL) + 0x19B, pBase;*/
-    //return pBase = (uintptr_t)LocateFunction("gs_set_viewport", "obs.dll"), pBase;
+    //backup the original disp to [&gs_set_viewport]
+
+    *(int*)b_disp = *(int*)(pBase + 2);
+
+    return pJ = pj, pBase;
+
 }
 
 __declspec(dllexport) uintptr_t init_(void) {
