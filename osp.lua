@@ -7,14 +7,48 @@ ffi.cdef[[
     void projector_patch_disable(void);
 ]]
 
-ffi.load(script_path() .. "obs_stretched_projector")
+local patch = ffi.load(script_path() .. "obs_stretched_projector")
 
 local setting_enabled = false
 
+
+function script_update(settings)
+
+    local enabled = obs.obs_data_get_bool(settings, "ospEnabled")
+
+    if enabled ~= setting_enabled then
+        setting_enabled = enabled
+
+        if enabled then
+            patch.projector_patch_enable()
+        else
+            patch.projector_patch_disable()
+        end
+    end
+
+end
+
+
+function script_unload()
+    if setting_enabled then
+        patch.projector_patch_disable()
+        setting_enabled = false
+    end
+end
+
+
+local function empty()
+end
+
 function script_load()
     local pBase = patch.init()
-    print(string.format("Located pBase = 0x%x", pBase))
+    if pBase == 0 then
+        script_update, script_unload = empty, empty
+    else
+        print(string.format("Located pBase = 0x%x", pBase))
+    end
 end
+
 
 function script_description()
     return [[
@@ -39,31 +73,4 @@ function script_properties()
 
     return props
 
-end
-
-
-function script_update(settings)
-
-    local enabled = obs.obs_data_get_bool(settings, "ospEnabled")
-
-    if enabled ~= setting_enabled then
-        setting_enabled = enabled
-
-        if enabled then
-            patch.projector_patch_enable()
-            print("[Projector Stretch] Enabled")
-        else
-            patch.projector_patch_disable()
-            print("[Projector Stretch] Disabled")
-        end
-    end
-
-end
-
-
-function script_unload()
-    if setting_enabled then
-        patch.projector_patch_disable()
-        setting_enabled = false
-    end
 end

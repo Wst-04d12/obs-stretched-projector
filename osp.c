@@ -23,7 +23,7 @@ static void* LocateFunction(const char* funcName, const char* module) {
 
     if (not SymInitialize(sSymSession, NULL, FALSE)) {
         MsgErr("SymInitialize failed");
-        return ret; // no need for clean up
+        return ret; //no need for clean up
     }
 
     HMODULE hModule = GetModuleHandleA(module);
@@ -126,6 +126,11 @@ __declspec(dllexport) uintptr_t init(void) {
             }
         }
         
+    }
+
+    if (pBase == 'Myon') {
+        MsgErr("Incompatible OBS version.\n");
+        return NULL;
     }
 
     //construct jumper
