@@ -118,9 +118,11 @@ __declspec(dllexport) void projector_patch_disable() {
 
 }
 
-static unsigned char lop[64];
-__declspec(dllexport) uintptr_t init_(void) {
-    /*return pBase = (uintptr_t)LocateFunction("OBSProjector::OBSRender", NULL) + 0x19B, pBase;*/
+static unsigned char mem[16];
+static unsigned char lop[32] = {0x31, 0xC9, 0x31, 0xD2, 0x45, 0x89, 0xE8, 0x45, 0x89, 0xE1, 0xFF, 0x15};
+
+__declspec(dllexport) uintptr_t init(void) {
+
     uintptr_t gs_set_viewport = LocateFunction("gs_set_viewport", "obs.dll");
     uintptr_t p = LocateFunction("OBSProjector::OBSRender", NULL);
 
@@ -140,10 +142,46 @@ __declspec(dllexport) uintptr_t init_(void) {
         
     }
 
+    //construct jumper
+
+    intptr_t* const pj = (uintptr_t)GetModuleHandleA(NULL) + 0x4E;
+
+    DWORD old;
+    VirtualProtect(pj, 8, PAGE_READWRITE, &old);
+
+    *pj = lop;
+
+    VirtualProtect(pj, 8, old, &old);
+
+    //overwrite instruction at patch point from `call qword ptr [&gs_set_viewport]` to `jmp qword ptr [jumper]`
+
+    VirtualProtect(pBase, 6, PAGE_EXECUTE_READWRITE, &old);
+
+    *(unsigned char*)(pBase + 1) = 0x25; //call -> jmp
+
+    *(int*)(pBase + 2) = (uintptr_t)pj - (pBase + 6); //[&gs_set_viewport] -> [jumper]
+
+    FlushInstructionCache(GetCurrentProcess(), pBase, 6);
+
+    VirtualProtect(pBase, 6, old, &old);
+
+    *(uintptr_t*)mem = gs_set_viewport;
+    
+    *(INT32*)(lop + 12) = mem - (lop + 16);
+
+    *((uintptr_t*)mem + 1) = pBase + 6;
+
+    *(WORD*)(lop + 16) = 0x25FF;
+
+    *(INT32*)(lop + 18) = mem + 8 - (lop + 22);
+
+    VirtualProtect(lop, sizeof lop, PAGE_EXECUTE_READWRITE, &old);
+
     return pBase;
+    /*return pBase = (uintptr_t)LocateFunction("OBSProjector::OBSRender", NULL) + 0x19B, pBase;*/
     //return pBase = (uintptr_t)LocateFunction("gs_set_viewport", "obs.dll"), pBase;
 }
 
-__declspec(dllexport) uintptr_t init(void) {
+__declspec(dllexport) uintptr_t init_(void) {
     return pBase = (uintptr_t)LocateFunction("OBSProjector::OBSRender", NULL) + 0x19B, pBase;
 }
