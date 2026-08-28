@@ -5,8 +5,6 @@
 #include <dbghelp.h>
 
 #pragma comment(lib, "Dbghelp.lib")
-extern SIZE_T(*PatternScan(LPBYTE pData, SIZE_T dataSize, LPCSTR pattern, _Out_ PSIZE_T pMatchesCount, _Out_ PSIZE_T pPatternLength))[];
-
 
 static void MsgErr(const char* prefix) {
     char buf[256];
@@ -70,7 +68,7 @@ static uintptr_t pJ =    'Myon';
 
 static unsigned char b_disp[4] = {'M', 'y', 'o', 'n'};
 
-__declspec(dllexport) void projector_patch_enable() {
+__declspec(dllexport) extern void projector_patch_enable() {
 
     DWORD old;
 
@@ -88,7 +86,7 @@ __declspec(dllexport) void projector_patch_enable() {
 
 }
 
-__declspec(dllexport) void projector_patch_disable() {
+__declspec(dllexport) extern void projector_patch_disable() {
 
     DWORD old;
 
@@ -104,10 +102,10 @@ __declspec(dllexport) void projector_patch_disable() {
 
 }
 
-static unsigned char mem[16];
-static unsigned char op[32] = {0x31, 0xC9, 0x31, 0xD2, 0x45, 0x89, 0xE8, 0x45, 0x89, 0xE1, 0xFF, 0x15};
+static unsigned char mem[16]; // qword ptr[2] = {&gs_set_viewport, pBase + 6}
+static unsigned char op[32] = {0x31, 0xC9, 0x31, 0xD2, 0x45, 0x89, 0xE8, 0x45, 0x89, 0xE1, 0xFF, 0x15}; // xor ecx, ecx; xor edx, edx; mov r8d, r13d; mov r9d, r12d; call qword ptr
 
-__declspec(dllexport) uintptr_t init(void) {
+__declspec(dllexport) extern uintptr_t init(void) {
 
     uintptr_t gs_set_viewport = LocateFunction("gs_set_viewport", "obs.dll");
     uintptr_t p = LocateFunction("OBSProjector::OBSRender", NULL);
@@ -129,7 +127,7 @@ __declspec(dllexport) uintptr_t init(void) {
     }
 
     if (pBase == 'Myon') {
-        MsgErr("Incompatible OBS version.\n");
+        MsgErr("Incompatible OBS version.");
         return NULL;
     }
 
@@ -143,6 +141,8 @@ __declspec(dllexport) uintptr_t init(void) {
     *pj = op;
 
     VirtualProtect(pj, 8, old, &old);
+
+    //setup assemblies
 
     *(uintptr_t*)mem = gs_set_viewport;
     
@@ -162,8 +162,4 @@ __declspec(dllexport) uintptr_t init(void) {
 
     return pJ = pj, pBase;
 
-}
-
-__declspec(dllexport) uintptr_t init_(void) {
-    return pBase = (uintptr_t)LocateFunction("OBSProjector::OBSRender", NULL) + 0x19B, pBase;
 }
