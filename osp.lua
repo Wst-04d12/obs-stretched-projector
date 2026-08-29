@@ -5,16 +5,23 @@ ffi.cdef[[
     unsigned long long init(void);
     void projector_patch_enable(void);
     void projector_patch_disable(void);
+    void enable_only_fs_projector(void);
+    void disable_only_fs_projector(void);
 ]]
 
 local patch = ffi.load(script_path() .. "obs_stretched_projector")
 
 local setting_enabled = false
 
+local setting_ofsp_enabled = false
+
 
 function script_update(settings)
 
     local enabled = obs.obs_data_get_bool(settings, "ospEnabled")
+    local enabled_ofsp = obs.obs_data_get_bool(settings, "ospOnlyFsProjector")
+
+    print(enabled, enabled_ofsp)
 
     if enabled ~= setting_enabled then
         setting_enabled = enabled
@@ -23,6 +30,16 @@ function script_update(settings)
             patch.projector_patch_enable()
         else
             patch.projector_patch_disable()
+        end
+    end
+
+    if enabled_ofsp ~= setting_ofsp_enabled then
+        setting_ofsp_enabled = enabled_ofsp
+
+        if enabled_ofsp then
+            patch.enable_only_fs_projector()
+        else
+            patch.disable_only_fs_projector()
         end
     end
 
@@ -69,6 +86,12 @@ function script_properties()
         props,
         "ospEnabled",
         "Enable Projector Stretching"
+    )
+
+    obs.obs_properties_add_bool(
+        props,
+        "ospOnlyFsProjector",
+        "Apply only on Fullscreen Projector"
     )
 
     return props

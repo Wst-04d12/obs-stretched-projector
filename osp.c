@@ -102,8 +102,10 @@ __declspec(dllexport) extern void projector_patch_disable() {
 
 }
 
+static unsigned char bOnlyFullscreenProjector = FALSE;
 static unsigned char mem[16]; // qword ptr[2] = {&gs_set_viewport, pBase + 6}
-static unsigned char op[64] = {0x49, 0x8b, 0x47, 0x20, 0x8B, 0x40, 0x10, 0xC1, 0xE8, 0x02, 0xA8, 0x01, 0x74, 0x00,
+static unsigned char op[64] = {0x8A, 0x05, 0x00, 0x00, 0x00, 0x00, 0xA8, 0x01, 0x74, 0x0E,
+    0x49, 0x8b, 0x47, 0x20, 0x8B, 0x40, 0x10, 0xC1, 0xE8, 0x02, 0xA8, 0x01, 0x74, 0x0A,
     0x31, 0xC9, 0x31, 0xD2, 0x45, 0x89, 0xE8, 0x45, 0x89, 0xE1, 0xFF, 0x15}; // xor ecx, ecx; xor edx, edx; mov r8d, r13d; mov r9d, r12d; call qword ptr
 
 __declspec(dllexport) extern uintptr_t init(void) {
@@ -147,15 +149,15 @@ __declspec(dllexport) extern uintptr_t init(void) {
 
     *(uintptr_t*)mem = gs_set_viewport;
     
-    *(INT32*)(op + 12 + 14) = mem - (op + 16 + 14);
+    *(INT32*)(op + 12 + 24) = mem - (op + 16 + 24);
 
     *((uintptr_t*)mem + 1) = pBase + 6;
 
-    *(WORD*)(op + 16 + 14) = 0x25FF;
+    *(WORD*)(op + 16 + 24) = 0x25FF;
 
-    *(INT32*)(op + 18 + 14) = mem + 8 - (op + 22 + 14);
+    *(INT32*)(op + 18 + 24) = mem + 8 - (op + 22 + 24);
 
-    *(INT8*)(op + 13) = (op + 10 + 14) - (op + 14);
+    *(INT32*)(op + 2) = &bOnlyFullscreenProjector - (op + 6);
 
     VirtualProtect(op, sizeof op, PAGE_EXECUTE_READWRITE, &old);
 
@@ -165,4 +167,12 @@ __declspec(dllexport) extern uintptr_t init(void) {
 
     return pJ = pj, pBase;
 
+}
+
+__declspec(dllexport) extern void enable_only_fs_projector() {
+    bOnlyFullscreenProjector = TRUE;
+}
+
+__declspec(dllexport) extern void disable_only_fs_projector() {
+    bOnlyFullscreenProjector = FALSE;
 }
