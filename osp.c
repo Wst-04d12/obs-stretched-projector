@@ -104,9 +104,12 @@ __declspec(dllexport) extern void projector_patch_disable() {
 
 static unsigned char bOnlyFullscreenProjector = FALSE;
 static unsigned char mem[16]; // qword ptr[2] = {&gs_set_viewport, pBase + 6}
+                               //mov al,byte ptr [bOnlyFullscreenProjector]; test al,1; je +0E /force reg manipulate/
 static unsigned char op[64] = {0x8A, 0x05, 0x00, 0x00, 0x00, 0x00, 0xA8, 0x01, 0x74, 0x0E,
+    //mov rax,qword ptr [r15 + 20]; mov eax,dword ptr [rax + 10]; shr eax,2; test al,1; je +0A /direct to `call`, skip reg manipulate/
     0x49, 0x8b, 0x47, 0x20, 0x8B, 0x40, 0x10, 0xC1, 0xE8, 0x02, 0xA8, 0x01, 0x74, 0x0A,
-    0x31, 0xC9, 0x31, 0xD2, 0x45, 0x89, 0xE8, 0x45, 0x89, 0xE1, 0xFF, 0x15}; // xor ecx, ecx; xor edx, edx; mov r8d, r13d; mov r9d, r12d; call qword ptr
+    //xor ecx, ecx; xor edx, edx; mov r8d, r13d; mov r9d, r12d; call qword ptr
+    0x31, 0xC9, 0x31, 0xD2, 0x45, 0x89, 0xE8, 0x45, 0x89, 0xE1, 0xFF, 0x15};
 
 __declspec(dllexport) extern uintptr_t init(void) {
 
