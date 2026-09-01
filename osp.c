@@ -106,13 +106,13 @@ static unsigned char bOnlyFullscreenProjector = FALSE;
 static unsigned char mem[16]; // qword ptr[2] = {&gs_set_viewport, pBase + 6}
 static unsigned char op[0x40] = {
 /*0x00*/0x8A, 0x05, 0x00, 0x00, 0x00, 0x00, // mov al, byte ptr [&bOnlyFullscreenProjector]
-/*0x06*/0xA8, 0x01,                         // test al, 1
+/*0x06*/0x3C, 0x00,                         // cmp al, 0
 /*0x08*/0x74, 0x0E,                         // je +0E               ;force reg manipulate
 /*0x0A*/0x49, 0x8b, 0x47, 0x20,             // mov rax, qword ptr [r15 + 20]
 /*0x0E*/0x8B, 0x40, 0x10,                   // mov eax, dword ptr [rax + 10]
 /*0x11*/0xC1, 0xE8, 0x02,                   // shr eax, 2
-/*0x14*/0xA8, 0x01,                         // test al, 1
-/*0x16*/0x74, 0x0A,                         // je +0A               ;direct to `call`, skip reg manipulate
+/*0x14*/0x3C, 0x01,                         // cmp al, 1
+/*0x16*/0x75, 0x0A,                         // jne +0A              ;direct to `call`, skip reg manipulate
 /*0x18*/0x31, 0xC9,                         // xor ecx, ecx
 /*0x1A*/0x31, 0xD2,                         // xor edx, edx
 /*0x1C*/0x45, 0x89, 0xE8,                   // mov r8d, r13d
@@ -186,4 +186,8 @@ __declspec(dllexport) extern void enable_only_fs_projector() {
 
 __declspec(dllexport) extern void disable_only_fs_projector() {
     bOnlyFullscreenProjector = FALSE;
+}
+
+__declspec(dllexport) extern void setup_pOBSProjector_register(unsigned int reg) {
+    *(unsigned int*)(op+0x0A) = reg;
 }
