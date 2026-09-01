@@ -1,4 +1,5 @@
-local obs = obslua
+local obs = require("obslua")
+local bit = require("bit")
 local ffi = require("ffi")
 
 ffi.cdef[[
@@ -15,11 +16,13 @@ local setting_enabled = false
 
 local setting_ofsp_enabled = false
 
+local full_compatible = obs.obs_get_version() == 0x20020002
+
 
 function script_update(settings)
 
     local enabled = obs.obs_data_get_bool(settings, "ospEnabled")
-    local enabled_ofsp = obs.obs_data_get_bool(settings, "ospOnlyFsProjector")
+    local enabled_ofsp = full_compatible and obs.obs_data_get_bool(settings, "ospOnlyFsProjector")
 
     print(enabled, enabled_ofsp)
 
@@ -64,6 +67,7 @@ function script_load()
     else
         print(string.format("Located pBase = 0x%x", pBase))
     end
+
 end
 
 
@@ -88,11 +92,16 @@ function script_properties()
         "Enable Projector Stretching"
     )
 
-    obs.obs_properties_add_bool(
-        props,
-        "ospOnlyFsProjector",
-        "Apply only on Fullscreen Projector"
-    )
+
+    if full_compatible then
+
+        obs.obs_properties_add_bool(
+            props,
+            "ospOnlyFsProjector",
+            "Apply only on Fullscreen Projector"
+        )
+
+    end
 
     return props
 

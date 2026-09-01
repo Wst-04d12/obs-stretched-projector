@@ -104,12 +104,22 @@ __declspec(dllexport) extern void projector_patch_disable() {
 
 static unsigned char bOnlyFullscreenProjector = FALSE;
 static unsigned char mem[16]; // qword ptr[2] = {&gs_set_viewport, pBase + 6}
-                               //mov al,byte ptr [bOnlyFullscreenProjector]; test al,1; je +0E /force reg manipulate/
-static unsigned char op[64] = {0x8A, 0x05, 0x00, 0x00, 0x00, 0x00, 0xA8, 0x01, 0x74, 0x0E,
-    //mov rax,qword ptr [r15 + 20]; mov eax,dword ptr [rax + 10]; shr eax,2; test al,1; je +0A /direct to `call`, skip reg manipulate/
-    0x49, 0x8b, 0x47, 0x20, 0x8B, 0x40, 0x10, 0xC1, 0xE8, 0x02, 0xA8, 0x01, 0x74, 0x0A,
-    //xor ecx, ecx; xor edx, edx; mov r8d, r13d; mov r9d, r12d; call qword ptr
-    0x31, 0xC9, 0x31, 0xD2, 0x45, 0x89, 0xE8, 0x45, 0x89, 0xE1, 0xFF, 0x15};
+static unsigned char op[0x40] = {
+/*0x00*/0x8A, 0x05, 0x00, 0x00, 0x00, 0x00, // mov al, byte ptr [&bOnlyFullscreenProjector]
+/*0x06*/0xA8, 0x01,                         // test al, 1
+/*0x08*/0x74, 0x0E,                         // je +0E               ;force reg manipulate
+/*0x0A*/0x49, 0x8b, 0x47, 0x20,             // mov rax, qword ptr [r15 + 20]
+/*0x0E*/0x8B, 0x40, 0x10,                   // mov eax, dword ptr [rax + 10]
+/*0x11*/0xC1, 0xE8, 0x02,                   // shr eax, 2
+/*0x14*/0xA8, 0x01,                         // test al, 1
+/*0x16*/0x74, 0x0A,                         // je +0A               ;direct to `call`, skip reg manipulate
+/*0x18*/0x31, 0xC9,                         // xor ecx, ecx
+/*0x1A*/0x31, 0xD2,                         // xor edx, edx
+/*0x1C*/0x45, 0x89, 0xE8,                   // mov r8d, r13d
+/*0x1F*/0x45, 0x89, 0xE1,                   // mov r9d, r12d
+/*0x22*/0xFF, 0x15, 0x00, 0x00, 0x00, 0x00, // call qword ptr [<&gs_set_viewport>]
+/*0x28*/0xFF, 0x25, 0x00, 0x00, 0x00, 0x00  // jmp qword ptr [&(pBase+6)]
+};
 
 __declspec(dllexport) extern uintptr_t init(void) {
 
@@ -155,8 +165,6 @@ __declspec(dllexport) extern uintptr_t init(void) {
     *(INT32*)(op + 12 + 24) = mem - (op + 16 + 24);
 
     *((uintptr_t*)mem + 1) = pBase + 6;
-
-    *(WORD*)(op + 16 + 24) = 0x25FF;
 
     *(INT32*)(op + 18 + 24) = mem + 8 - (op + 22 + 24);
 
