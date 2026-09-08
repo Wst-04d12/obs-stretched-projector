@@ -103,30 +103,9 @@ __declspec(dllexport) extern void projector_patch_disable() {
 }
 
 
-static CRITICAL_SECTION g_cs;
-
 static unsigned char bOnlyFullscreenProjector = FALSE;
 
-static unsigned char bRegPrepareFailed = FALSE;
-
 static unsigned char mem[16]; // qword ptr[2] = {&gs_set_viewport, pBase + 6}
-struct Reg { unsigned __int64 r15, r14, r13, r12, r11, r10, r9, r8, rbx, rdx, rcx, rax, rdi, rsi, rbp, rsp; };
-struct mov_inst { unsigned char i0, i1, i2; };
-struct mov_inst mov_insts[16] = {
-    0x49, 0x8B, 0xC7, 0x49, 0x8B, 0xC6, 0x49, 0x8B, 0xC5, 0x49, 0x8B, 0xC4, 
-    0x49, 0x8B, 0xC3, 0x49, 0x8B, 0xC2, 0x49, 0x8B, 0xC1, 0x49, 0x8B, 0xC0,
-    0x48, 0x8B, 0xC3, 0x48, 0x8B, 0xC2, 0x48, 0x8B, 0xC1, 0x48, 0x8B, 0xC0,
-    0x48, 0x8B, 0xC7, 0x48, 0x8B, 0xC6, 0x48, 0x8B, 0xC5, 0x48, 0x8B, 0xC4
-};
-
-struct COL {
-    UINT32 signature;
-    UINT32 offset;
-    UINT32 cdOffset;
-    INT32  pTypeDescriptor;
-    INT32  pClassHierarchy;
-    INT32  pSelf;
-};
 
 static unsigned char op[] = {
         0x54, 0x55, 0x56, 0x57, 0x50, 0x51, 0x52, 0x53,             // push rsp bp si di ax cx dx bx 8 .. 15
@@ -140,26 +119,45 @@ static unsigned char op[] = {
         0x41, 0x5F, 0x41, 0x5E, 0x41, 0x5D, 0x41, 0x5C,             // pop ...
         0x41, 0x5B, 0x41, 0x5A, 0x41, 0x59, 0x41, 0x58,
         0x5B, 0x5A, 0x59, 0x58, 0x5F, 0x5E, 0x5D,
-        0x48, 0x83, 0xC4, 0x08,                                     // add rsp, 8
-        /*                   0x4A(74)                    */
-/*0x00*/0x8A, 0x05, 0x00, 0x00, 0x00, 0x00, // mov al, byte ptr [&bOnlyFullscreenProjector]
-/*0x06*/0x3C, 0x00,                         // cmp al, 0
-/*0x08*/0x74, 0x11,                         // je +11               ;force reg manipulate
-/*0x0A*/0x4C, 0x89, 0xD8,                   // mov rax, r11
-/*0x0D*/0x48, 0x8B, 0x40, 0x20,             // mov rax, qword ptr [rax + 20]
-/*0x11*/0x8B, 0x40, 0x10,                   // mov eax, dword ptr [rax + 10]
-/*0x14*/0xC1, 0xE8, 0x02,                   // shr eax, 2
-/*0x17*/0x3C, 0x01,                         // cmp al, 1
-/*0x19*/0x75, 0x0A,                         // jne +0A              ;direct to `call`, skip reg manipulate
-/*0x1B*/0x31, 0xC9,                         // xor ecx, ecx
-/*0x1D*/0x31, 0xD2,                         // xor edx, edx
-/*0x1F*/0x45, 0x89, 0xE8,                   // mov r8d, r13d
-/*0x22*/0x45, 0x89, 0xE1,                   // mov r9d, r12d
-/*0x25*/0xFF, 0x15, 0x00, 0x00, 0x00, 0x00, // call qword ptr [<&gs_set_viewport>]
-/*0x2B*/0xFF, 0x25, 0x00, 0x00, 0x00, 0x00  // jmp qword ptr [&(pBase+6)]
+        0x48, 0x83, 0xC4, 0x08,          /*  <- 0x4A(74)   */       // add rsp, 8
+/*0x00*/0x8A, 0x05, 0x00, 0x00, 0x00, 0x00,                         // mov al, byte ptr [&bOnlyFullscreenProjector]
+/*0x06*/0x3C, 0x00,                                                 // cmp al, 0
+/*0x08*/0x74, 0x11,                                                 // je +11               ;force reg manipulate
+/*0x0A*/0x4C, 0x89, 0xD8,                                           // mov rax, r11
+/*0x0D*/0x48, 0x8B, 0x40, 0x20,                                     // mov rax, qword ptr [rax + 20]
+/*0x11*/0x8B, 0x40, 0x10,                                           // mov eax, dword ptr [rax + 10]
+/*0x14*/0xC1, 0xE8, 0x02,                                           // shr eax, 2
+/*0x17*/0x3C, 0x01,                                                 // cmp al, 1
+/*0x19*/0x75, 0x0A,                                                 // jne +0A              ;direct to `call`, skip reg manipulate
+/*0x1B*/0x31, 0xC9,                                                 // xor ecx, ecx
+/*0x1D*/0x31, 0xD2,                                                 // xor edx, edx
+/*0x1F*/0x45, 0x89, 0xE8,                                           // mov r8d, r13d
+/*0x22*/0x45, 0x89, 0xE1,                                           // mov r9d, r12d
+/*0x25*/0xFF, 0x15, 0x00, 0x00, 0x00, 0x00,                         // call qword ptr [<&gs_set_viewport>]
+/*0x2B*/0xFF, 0x25, 0x00, 0x00, 0x00, 0x00                          // jmp qword ptr [&(pBase+6)]
 };
 
 #define OP op+74
+
+
+static CRITICAL_SECTION g_cs;
+static unsigned char bRegPrepareFailed = FALSE;
+struct Reg { unsigned __int64 r15, r14, r13, r12, r11, r10, r9, r8, rbx, rdx, rcx, rax, rdi, rsi, rbp, rsp; };
+struct mov_inst { unsigned char i0, i1, i2; };
+struct mov_inst mov_insts[16] = { // mov rax, <reg>
+    0x49, 0x8B, 0xC7, 0x49, 0x8B, 0xC6, 0x49, 0x8B, 0xC5, 0x49, 0x8B, 0xC4,
+    0x49, 0x8B, 0xC3, 0x49, 0x8B, 0xC2, 0x49, 0x8B, 0xC1, 0x49, 0x8B, 0xC0,
+    0x48, 0x8B, 0xC3, 0x48, 0x8B, 0xC2, 0x48, 0x8B, 0xC1, 0x48, 0x8B, 0xC0,
+    0x48, 0x8B, 0xC7, 0x48, 0x8B, 0xC6, 0x48, 0x8B, 0xC5, 0x48, 0x8B, 0xC4
+};
+struct COL {
+    UINT32 signature;
+    UINT32 offset;
+    UINT32 cdOffset;
+    INT32  pTypeDescriptor;
+    INT32  pClassHierarchy;
+    INT32  pSelf;
+};
 
 static void SetupRegThisPtrObsProjector(struct Reg* reg) {
 
@@ -195,7 +193,6 @@ static void SetupRegThisPtrObsProjector(struct Reg* reg) {
                 VirtualProtect(pJ, 8, old, &old);
                 goto ret;
             }
-
         }
         __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
@@ -245,6 +242,10 @@ __declspec(dllexport) extern uintptr_t init(void) {
 
     //setup assemblies
 
+    *(uintptr_t*)(op + 33) = &SetupRegThisPtrObsProjector;
+
+    *(INT32*)(OP + 2) = &bOnlyFullscreenProjector - (OP + 6);
+
     *(uintptr_t*)mem = gs_set_viewport;
     
     *(INT32*)(OP + 0x25 + 2) = mem - (OP + 0x25 + 6);
@@ -253,11 +254,7 @@ __declspec(dllexport) extern uintptr_t init(void) {
 
     *(INT32*)(OP + 0x2B + 2) = mem + 8 - (OP + 0x2B + 6);
 
-    *(INT32*)(OP + 2) = &bOnlyFullscreenProjector - (OP + 6);
-
 #undef OP
-
-    *(uintptr_t*)(op + 33) = &SetupRegThisPtrObsProjector;
 
     VirtualProtect(op, sizeof op, PAGE_EXECUTE_READWRITE, &old);
 
@@ -285,8 +282,4 @@ __declspec(dllexport) extern void uninit(void) {
 
 __declspec(dllexport) extern unsigned int get_reg_setup_status() {
     return bRegPrepareFailed;
-}
-
-__declspec(dllexport) extern void setup_pOBSProjector_register(unsigned int bytes) {
-    *(unsigned int*)(op+0x0A) = bytes;
 }
