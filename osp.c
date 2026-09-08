@@ -102,29 +102,113 @@ __declspec(dllexport) extern void projector_patch_disable() {
 
 }
 
+
+static CRITICAL_SECTION g_cs;
+
 static unsigned char bOnlyFullscreenProjector = FALSE;
+
+static unsigned char bRegPrepareFailed = FALSE;
+
 static unsigned char mem[16]; // qword ptr[2] = {&gs_set_viewport, pBase + 6}
-static unsigned char op[0x40] = {
+struct Reg { unsigned __int64 r15, r14, r13, r12, r11, r10, r9, r8, rbx, rdx, rcx, rax, rdi, rsi, rbp, rsp; };
+struct mov_inst { unsigned char i0, i1, i2; };
+struct mov_inst mov_insts[16] = {
+    0x49, 0x8B, 0xC7, 0x49, 0x8B, 0xC6, 0x49, 0x8B, 0xC5, 0x49, 0x8B, 0xC4, 
+    0x49, 0x8B, 0xC3, 0x49, 0x8B, 0xC2, 0x49, 0x8B, 0xC1, 0x49, 0x8B, 0xC0,
+    0x48, 0x8B, 0xC3, 0x48, 0x8B, 0xC2, 0x48, 0x8B, 0xC1, 0x48, 0x8B, 0xC0,
+    0x48, 0x8B, 0xC7, 0x48, 0x8B, 0xC6, 0x48, 0x8B, 0xC5, 0x48, 0x8B, 0xC4
+};
+
+struct COL {
+    UINT32 signature;
+    UINT32 offset;
+    UINT32 cdOffset;
+    INT32  pTypeDescriptor;
+    INT32  pClassHierarchy;
+    INT32  pSelf;
+};
+
+static unsigned char op[] = {
+        0x54, 0x55, 0x56, 0x57, 0x50, 0x51, 0x52, 0x53,             // push rsp bp si di ax cx dx bx 8 .. 15
+        0x41, 0x50, 0x41, 0x51, 0x41, 0x52, 0x41, 0x53,
+        0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
+        0x48, 0x89, 0xE1,                                           // mov rcx, rsp
+        0x48, 0x83, 0xEC, 0x20,                                     // sub rsp, 20h
+        0x48, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // mov rax, &SetupRegThisPtrObsProjector
+        0xFF, 0xD0,                                                 // call rax
+        0x48, 0x83, 0xC4, 0x20,                                     // add rsp, 20h
+        0x41, 0x5F, 0x41, 0x5E, 0x41, 0x5D, 0x41, 0x5C,             // pop ...
+        0x41, 0x5B, 0x41, 0x5A, 0x41, 0x59, 0x41, 0x58,
+        0x5B, 0x5A, 0x59, 0x58, 0x5F, 0x5E, 0x5D,
+        0x48, 0x83, 0xC4, 0x08,                                     // add rsp, 8
+        /*                   0x4A(74)                    */
 /*0x00*/0x8A, 0x05, 0x00, 0x00, 0x00, 0x00, // mov al, byte ptr [&bOnlyFullscreenProjector]
 /*0x06*/0x3C, 0x00,                         // cmp al, 0
-/*0x08*/0x74, 0x0E,                         // je +0E               ;force reg manipulate
-/*0x0A*/0x49, 0x8b, 0x47, 0x20,             // mov rax, qword ptr [r15 + 20]
-/*0x0E*/0x8B, 0x40, 0x10,                   // mov eax, dword ptr [rax + 10]
-/*0x11*/0xC1, 0xE8, 0x02,                   // shr eax, 2
-/*0x14*/0x3C, 0x01,                         // cmp al, 1
-/*0x16*/0x75, 0x0A,                         // jne +0A              ;direct to `call`, skip reg manipulate
-/*0x18*/0x31, 0xC9,                         // xor ecx, ecx
-/*0x1A*/0x31, 0xD2,                         // xor edx, edx
-/*0x1C*/0x45, 0x89, 0xE8,                   // mov r8d, r13d
-/*0x1F*/0x45, 0x89, 0xE1,                   // mov r9d, r12d
-/*0x22*/0xFF, 0x15, 0x00, 0x00, 0x00, 0x00, // call qword ptr [<&gs_set_viewport>]
-/*0x28*/0xFF, 0x25, 0x00, 0x00, 0x00, 0x00  // jmp qword ptr [&(pBase+6)]
+/*0x08*/0x74, 0x11,                         // je +11               ;force reg manipulate
+/*0x0A*/0x4C, 0x89, 0xD8,                   // mov rax, r11
+/*0x0D*/0x48, 0x8B, 0x40, 0x20,             // mov rax, qword ptr [rax + 20]
+/*0x11*/0x8B, 0x40, 0x10,                   // mov eax, dword ptr [rax + 10]
+/*0x14*/0xC1, 0xE8, 0x02,                   // shr eax, 2
+/*0x17*/0x3C, 0x01,                         // cmp al, 1
+/*0x19*/0x75, 0x0A,                         // jne +0A              ;direct to `call`, skip reg manipulate
+/*0x1B*/0x31, 0xC9,                         // xor ecx, ecx
+/*0x1D*/0x31, 0xD2,                         // xor edx, edx
+/*0x1F*/0x45, 0x89, 0xE8,                   // mov r8d, r13d
+/*0x22*/0x45, 0x89, 0xE1,                   // mov r9d, r12d
+/*0x25*/0xFF, 0x15, 0x00, 0x00, 0x00, 0x00, // call qword ptr [<&gs_set_viewport>]
+/*0x2B*/0xFF, 0x25, 0x00, 0x00, 0x00, 0x00  // jmp qword ptr [&(pBase+6)]
 };
+
+#define OP op+74
+
+static void SetupRegThisPtrObsProjector(struct Reg* reg) {
+
+    static unsigned char thisRegister = 0xFF;
+
+    EnterCriticalSection(&g_cs);
+
+    if (bRegPrepareFailed or thisRegister < 16) {
+        goto ret;
+    }
+
+    unsigned __int64* regs = (unsigned __int64*)reg;
+
+    for (unsigned char i = 0; i < 16; i = i + 1) {
+        __try {
+            unsigned __int64 obj = regs[i];
+            unsigned __int64 vptr = *(unsigned __int64*)obj;
+            struct COL* col = *(struct COL**)(vptr - 8);
+
+            if (col->signature != 1)
+                continue;
+
+            char* image = (char*)col - col->pSelf;
+            char* type = image + col->pTypeDescriptor + 16;
+
+            if (strstr(type, "OBSProjector")) {
+                thisRegister = i;
+                *(struct mov_inst*)(OP + 0x0A) = mov_insts[i];
+                FlushInstructionCache(GetCurrentProcess(), OP + 0x0A, 3);
+                DWORD old;
+                VirtualProtect(pJ, 8, PAGE_READWRITE, &old);
+                *(uintptr_t*)pJ = OP;
+                VirtualProtect(pJ, 8, old, &old);
+                goto ret;
+            }
+
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
+    bRegPrepareFailed = TRUE;
+
+    ret: return LeaveCriticalSection(&g_cs);
+
+}
 
 __declspec(dllexport) extern uintptr_t init(void) {
 
     uintptr_t gs_set_viewport = LocateFunction("gs_set_viewport", "obs.dll");
-    uintptr_t isFullScreen = GetProcAddress(GetModuleHandleA("Qt6Widgets.dll"), "?isFullScreen@QWidget@@QEBA_NXZ");
     uintptr_t p = LocateFunction("OBSProjector::OBSRender", NULL);
 
     for (ptrdiff_t offset = 0; offset < 0x400; offset = offset + 1) {
@@ -163,19 +247,25 @@ __declspec(dllexport) extern uintptr_t init(void) {
 
     *(uintptr_t*)mem = gs_set_viewport;
     
-    *(INT32*)(op + 12 + 24) = mem - (op + 16 + 24);
+    *(INT32*)(OP + 0x25 + 2) = mem - (OP + 0x25 + 6);
 
     *((uintptr_t*)mem + 1) = pBase + 6;
 
-    *(INT32*)(op + 18 + 24) = mem + 8 - (op + 22 + 24);
+    *(INT32*)(OP + 0x2B + 2) = mem + 8 - (OP + 0x2B + 6);
 
-    *(INT32*)(op + 2) = &bOnlyFullscreenProjector - (op + 6);
+    *(INT32*)(OP + 2) = &bOnlyFullscreenProjector - (OP + 6);
+
+#undef OP
+
+    *(uintptr_t*)(op + 33) = &SetupRegThisPtrObsProjector;
 
     VirtualProtect(op, sizeof op, PAGE_EXECUTE_READWRITE, &old);
 
     //backup the original disp to [&gs_set_viewport]
 
     *(int*)b_disp = *(int*)(pBase + 2);
+
+    InitializeCriticalSection(&g_cs);
 
     return pJ = pj, pBase;
 
@@ -187,6 +277,14 @@ __declspec(dllexport) extern void enable_only_fs_projector() {
 
 __declspec(dllexport) extern void disable_only_fs_projector() {
     bOnlyFullscreenProjector = FALSE;
+}
+
+__declspec(dllexport) extern void uninit(void) {
+    DeleteCriticalSection(&g_cs);
+}
+
+__declspec(dllexport) extern unsigned int get_reg_setup_status() {
+    return bRegPrepareFailed;
 }
 
 __declspec(dllexport) extern void setup_pOBSProjector_register(unsigned int bytes) {

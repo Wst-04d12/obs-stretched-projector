@@ -8,6 +8,8 @@ ffi.cdef[[
     void projector_patch_disable(void);
     void enable_only_fs_projector(void);
     void disable_only_fs_projector(void);
+    void uninit(void);
+    unsigned int get_reg_setup_status(void);
 ]]
 
 local patch = ffi.load(script_path() .. "obs_stretched_projector")
@@ -16,12 +18,15 @@ local setting_enabled = false
 
 local setting_ofsp_enabled = false
 
-local full_compatible = obs.obs_get_version() == 0x20020002
+local full_compatible = false
 
 
 function script_update(settings)
 
     local enabled = obs.obs_data_get_bool(settings, "ospEnabled")
+
+    full_compatible = patch.get_reg_setup_status() == 0
+
     local enabled_ofsp = full_compatible and obs.obs_data_get_bool(settings, "ospOnlyFsProjector")
 
     print(enabled, enabled_ofsp)
@@ -54,6 +59,7 @@ function script_unload()
         patch.projector_patch_disable()
         setting_enabled = false
     end
+    patch.uninit()
 end
 
 
