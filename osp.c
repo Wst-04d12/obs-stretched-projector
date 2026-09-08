@@ -9,7 +9,7 @@
 static void MsgErr(const char* prefix) {
     char buf[256];
     wsprintfA(buf, "%s (%lu)", prefix, GetLastError());
-    MessageBoxA(NULL, buf, "osp", MB_OK);
+    MessageBoxA(NULL, buf, "OBS Stretched Projector Error Message", MB_OK);
 }
 
 static void* LocateFunction(const char* funcName, const char* module) {
@@ -124,6 +124,7 @@ static unsigned char op[0x40] = {
 __declspec(dllexport) extern uintptr_t init(void) {
 
     uintptr_t gs_set_viewport = LocateFunction("gs_set_viewport", "obs.dll");
+    uintptr_t isFullScreen = GetProcAddress(GetModuleHandleA("Qt6Widgets.dll"), "?isFullScreen@QWidget@@QEBA_NXZ");
     uintptr_t p = LocateFunction("OBSProjector::OBSRender", NULL);
 
     for (ptrdiff_t offset = 0; offset < 0x400; offset = offset + 1) {
@@ -188,6 +189,6 @@ __declspec(dllexport) extern void disable_only_fs_projector() {
     bOnlyFullscreenProjector = FALSE;
 }
 
-__declspec(dllexport) extern void setup_pOBSProjector_register(unsigned int reg) {
-    *(unsigned int*)(op+0x0A) = reg;
+__declspec(dllexport) extern void setup_pOBSProjector_register(unsigned int bytes) {
+    *(unsigned int*)(op+0x0A) = bytes;
 }
