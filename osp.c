@@ -6,7 +6,9 @@
 
 #pragma comment(lib, "Dbghelp.lib")
 
-static void MsgErr(const char* prefix) {
+#pragma section(".text")
+
+__declspec(noinline) static void MsgErr(const char* prefix) {
     char buf[256];
     wsprintfA(buf, "%s (%lu)", prefix, GetLastError());
     MessageBoxA(NULL, buf, "OBS Stretched Projector Error Message", MB_OK);
@@ -107,7 +109,7 @@ static unsigned char bOnlyFullscreenProjector = FALSE;
 
 static unsigned char mem[16]; // qword ptr[2] = {&gs_set_viewport, pBase + 6}
 
-static unsigned char op[] = {
+__declspec(allocate(".text")) static unsigned char op[] = {
         0x54, 0x55, 0x56, 0x57, 0x50, 0x51, 0x52, 0x53,             // push rsp bp si di ax cx dx bx 8 .. 15
         0x41, 0x50, 0x41, 0x51, 0x41, 0x52, 0x41, 0x53,
         0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
@@ -169,6 +171,8 @@ static void SetupRegThisPtrObsProjector(const struct Reg* reg) {
         goto ret;
     }
 
+    DWORD old_protect;
+
     unsigned __int64* regs = (unsigned __int64*)reg;
 
     for (unsigned char i = 0; i < 16; i = i + 1) {
@@ -192,14 +196,13 @@ static void SetupRegThisPtrObsProjector(const struct Reg* reg) {
                 *(struct mov_inst*)(OP + 0x0A) = mov_insts[i];
                 FlushInstructionCache(GetCurrentProcess(), OP + 0x0A, 3);
 
-                DWORD old;
-                VirtualProtect(pJ, 8, PAGE_READWRITE, &old);
+                VirtualProtect(pJ, 8, PAGE_READWRITE, &old_protect);
                 *(uintptr_t*)pJ = OP;
-                VirtualProtect(pJ, 8, old, &old);
+                VirtualProtect(pJ, 8, old_protect, &old_protect);
 
                 cRegPrepareFailedState = FALSE;
 
-                goto ret;
+                goto finalize;
 
             }
 
@@ -211,6 +214,7 @@ static void SetupRegThisPtrObsProjector(const struct Reg* reg) {
     cRegPrepareFailedState = TRUE;
     (OP)[0x08] = '\xEB'; // je -> jmp
 
+    finalize: VirtualProtect(op, sizeof op, PAGE_EXECUTE_READ, &old_protect);
     ret: return LeaveCriticalSection(&g_cs);
 
 }
@@ -254,6 +258,8 @@ __declspec(dllexport) extern uintptr_t init(void) {
 
     //setup assemblies
 
+    VirtualProtect(op, sizeof op, PAGE_EXECUTE_READWRITE, &old);
+
     *(uintptr_t*)(op + 33) = &SetupRegThisPtrObsProjector;
 
     *(INT32*)(OP + 2) = &bOnlyFullscreenProjector - (OP + 6);
@@ -267,8 +273,6 @@ __declspec(dllexport) extern uintptr_t init(void) {
     *(INT32*)(OP + 0x2B + 2) = mem + 8 - (OP + 0x2B + 6);
 
 #undef OP
-
-    VirtualProtect(op, sizeof op, PAGE_EXECUTE_READWRITE, &old);
 
     //backup the original disp to [&gs_set_viewport]
 
