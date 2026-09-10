@@ -10,6 +10,7 @@ ffi.cdef[[
     void disable_only_fs_projector(void);
     void uninit(void);
     unsigned int get_reg_setup_status(void);
+    void lua_msgerr(const char*);
 ]]
 
 local patch = ffi.load(script_path() .. "obs_stretched_projector")
@@ -18,18 +19,17 @@ local setting_enabled = false
 
 local setting_ofsp_enabled = false
 
-local full_compatible = false
+local notified
+--local full_compatible = false
 
 
 function script_update(settings)
 
     local enabled = obs.obs_data_get_bool(settings, "ospEnabled")
 
-    full_compatible = patch.get_reg_setup_status() == 0
+    --full_compatible = patch.get_reg_setup_status() == 0
 
-    local enabled_ofsp = full_compatible and obs.obs_data_get_bool(settings, "ospOnlyFsProjector")
-
-    print(enabled, enabled_ofsp)
+    local enabled_ofsp = --[[full_compatible and ]]obs.obs_data_get_bool(settings, "ospOnlyFsProjector")
 
     if enabled ~= setting_enabled then
         setting_enabled = enabled
@@ -39,6 +39,11 @@ function script_update(settings)
         else
             patch.projector_patch_disable()
         end
+    end
+
+    if not notified and enabled_ofsp and patch.get_reg_setup_status() == 1 then
+        notified = true
+        patch.lua_msgerr([["Apply only on Fullscreen Projector" will not working due to incompatible OBS version.]])
     end
 
     if enabled_ofsp ~= setting_ofsp_enabled then
@@ -99,7 +104,7 @@ function script_properties()
     )
 
 
-    if full_compatible then
+    --if full_compatible then
 
         obs.obs_properties_add_bool(
             props,
@@ -107,7 +112,7 @@ function script_properties()
             "Apply only on Fullscreen Projector"
         )
 
-    end
+    --end
 
     return props
 

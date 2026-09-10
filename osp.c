@@ -141,10 +141,10 @@ static unsigned char op[] = {
 
 
 static CRITICAL_SECTION g_cs;
-static unsigned char bRegPrepareFailed = FALSE;
+static unsigned char cRegPrepareFailedState = 255;
 struct Reg { unsigned __int64 r15, r14, r13, r12, r11, r10, r9, r8, rbx, rdx, rcx, rax, rdi, rsi, rbp, rsp; };
 struct mov_inst { unsigned char i0, i1, i2; };
-struct mov_inst mov_insts[16] = { // mov rax, <reg>
+static const struct mov_inst mov_insts[16] = { // mov rax, <reg>
     0x49, 0x8B, 0xC7, 0x49, 0x8B, 0xC6, 0x49, 0x8B, 0xC5, 0x49, 0x8B, 0xC4,
     0x49, 0x8B, 0xC3, 0x49, 0x8B, 0xC2, 0x49, 0x8B, 0xC1, 0x49, 0x8B, 0xC0,
     0x48, 0x8B, 0xC3, 0x48, 0x8B, 0xC2, 0x48, 0x8B, 0xC1, 0x48, 0x8B, 0xC0,
@@ -159,45 +159,57 @@ struct COL {
     INT32  pSelf;
 };
 
-static void SetupRegThisPtrObsProjector(struct Reg* reg) {
+static void SetupRegThisPtrObsProjector(const struct Reg* reg) {
 
     static unsigned char thisRegister = 0xFF;
 
     EnterCriticalSection(&g_cs);
 
-    if (bRegPrepareFailed or thisRegister < 16) {
+    if (cRegPrepareFailedState == TRUE or thisRegister < 16) {
         goto ret;
     }
 
     unsigned __int64* regs = (unsigned __int64*)reg;
 
     for (unsigned char i = 0; i < 16; i = i + 1) {
+
         __try {
+
             unsigned __int64 obj = regs[i];
             unsigned __int64 vptr = *(unsigned __int64*)obj;
             struct COL* col = *(struct COL**)(vptr - 8);
 
-            if (col->signature != 1)
+            if (col->signature != 1) {
                 continue;
+            }
 
             char* image = (char*)col - col->pSelf;
             char* type = image + col->pTypeDescriptor + 16;
 
             if (strstr(type, "OBSProjector")) {
+
                 thisRegister = i;
                 *(struct mov_inst*)(OP + 0x0A) = mov_insts[i];
                 FlushInstructionCache(GetCurrentProcess(), OP + 0x0A, 3);
+
                 DWORD old;
                 VirtualProtect(pJ, 8, PAGE_READWRITE, &old);
                 *(uintptr_t*)pJ = OP;
                 VirtualProtect(pJ, 8, old, &old);
+
+                cRegPrepareFailedState = FALSE;
+
                 goto ret;
+
             }
+
         }
         __except (EXCEPTION_EXECUTE_HANDLER) {}
+
     }
 
-    bRegPrepareFailed = TRUE;
+    cRegPrepareFailedState = TRUE;
+    (OP)[0x08] = '\xEB'; // je -> jmp
 
     ret: return LeaveCriticalSection(&g_cs);
 
@@ -281,5 +293,9 @@ __declspec(dllexport) extern void uninit(void) {
 }
 
 __declspec(dllexport) extern unsigned int get_reg_setup_status() {
-    return bRegPrepareFailed;
+    return cRegPrepareFailedState;
+}
+
+__declspec(dllexport) extern void lua_msgerr(const char* msg) {
+    MsgErr(msg);
 }
