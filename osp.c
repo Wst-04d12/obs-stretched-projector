@@ -14,7 +14,7 @@ __declspec(noinline) static void MsgErr(const char* prefix) {
     MessageBoxA(NULL, buf, "OBS Stretched Projector Error Message", MB_OK);
 }
 
-static void* LocateFunction(const char* funcName, const char* module) {
+static void* LocateFunction(const char* funcName, const char* module, _Out_opt_ unsigned long* pFuncSize) {
 
     void* ret = NULL;
     const static HANDLE sSymSession = 0x1124112411241124;
@@ -53,6 +53,10 @@ static void* LocateFunction(const char* funcName, const char* module) {
     if (not SymFromName(sSymSession, funcName, sym)) {
         MsgErr("SymFromName failed");
         goto clean_up;
+    }
+
+    if (pFuncSize != NULL) {
+        *pFuncSize = sym -> Size;
     }
 
     ret = sym -> Address;
@@ -221,10 +225,11 @@ static void SetupRegThisPtrObsProjector(const struct Reg* reg) {
 
 __declspec(dllexport) extern uintptr_t init(void) {
 
-    uintptr_t gs_set_viewport = LocateFunction("gs_set_viewport", "obs.dll");
-    uintptr_t p = LocateFunction("OBSProjector::OBSRender", NULL);
+    unsigned long func_size;
+    uintptr_t gs_set_viewport = LocateFunction("gs_set_viewport", "obs.dll", NULL);
+    uintptr_t p = LocateFunction("OBSProjector::OBSRender", NULL, &func_size);
 
-    for (ptrdiff_t offset = 0; offset < 0x400; offset = offset + 1) {
+    for (unsigned long offset = 0; offset < func_size - 1; offset = offset + 1) {
         uintptr_t ip = p + offset;
         WORD inst = *(WORD*)ip;
         if (inst != 0x15FF) {
