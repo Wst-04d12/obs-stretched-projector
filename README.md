@@ -6,4 +6,5 @@
 3. Use `Enable Projector Stretching` toggle on the right (under `Description`).  
   
 ### Build From Source:  
-Compile `osp.c` as DLL named `obs_stretched_projector.dll` and place it alongside with `osp.lua` and you are good to go.
+0) Please use MSVC.  
+1) Compile `osp.c` as DLL named `obs_stretched_projector.dll` and place it alongside with `osp.lua` and you are good to go.
