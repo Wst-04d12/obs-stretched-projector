@@ -14,7 +14,7 @@ __declspec(noinline) static void MsgErr(const char* prefix) {
     MessageBoxA(NULL, buf, "OBS Stretched Projector Error Message", MB_OK);
 }
 
-static void* LocateFunction(const char* funcName, const char* module, _Out_opt_ unsigned long* pFuncSize) {
+_Success_(return != NULL) static void* LocateFunction(const char* funcName, const char* module, _Out_opt_ unsigned long* pFuncSize) {
 
     void* ret = NULL;
     const static HANDLE sSymSession = 0x1124112411241124;
@@ -148,7 +148,7 @@ __declspec(allocate(".text")) static unsigned char op[] = {
 
 static CRITICAL_SECTION g_cs;
 static unsigned char cRegPrepareFailedState = 255;
-struct Reg { unsigned __int64 r15, r14, r13, r12, r11, r10, r9, r8, rbx, rdx, rcx, rax, rdi, rsi, rbp, rsp; };
+struct _GPR { unsigned __int64 r15, r14, r13, r12, r11, r10, r9, r8, rbx, rdx, rcx, rax, rdi, rsi, rbp, rsp; };
 struct mov_inst { unsigned char i0, i1, i2; };
 static const struct mov_inst mov_insts[16] = { // mov rax, <reg>
     0x49, 0x8B, 0xC7, 0x49, 0x8B, 0xC6, 0x49, 0x8B, 0xC5, 0x49, 0x8B, 0xC4,
@@ -165,7 +165,7 @@ struct COL {
     INT32  pSelf;
 };
 
-static void SetupRegThisPtrObsProjector(const struct Reg* reg) {
+static void SetupRegThisPtrObsProjector(const struct _GPR* reg) {
 
     static unsigned char thisRegister = 0xFF;
 
@@ -226,8 +226,11 @@ static void SetupRegThisPtrObsProjector(const struct Reg* reg) {
 __declspec(dllexport) extern uintptr_t init(void) {
 
     unsigned long func_size;
-    uintptr_t gs_set_viewport = LocateFunction("gs_set_viewport", "obs.dll", NULL);
     uintptr_t p = LocateFunction("OBSProjector::OBSRender", NULL, &func_size);
+
+    if (p == NULL) goto failed;
+
+    uintptr_t gs_set_viewport = LocateFunction("gs_set_viewport", "obs.dll", NULL);
 
     for (unsigned long offset = 0; offset < func_size - 1; offset = offset + 1) {
         uintptr_t ip = p + offset;
@@ -245,7 +248,7 @@ __declspec(dllexport) extern uintptr_t init(void) {
         
     }
 
-    if (pBase == 'Myon') {
+    if (pBase == 'Myon') failed: { 
         MsgErr("Incompatible OBS version.");
         return NULL;
     }
@@ -268,7 +271,7 @@ __declspec(dllexport) extern uintptr_t init(void) {
     *(uintptr_t*)(op + 33) = &SetupRegThisPtrObsProjector;
 
     *(INT32*)(OP + 2) = &bOnlyFullscreenProjector - (OP + 6);
-
+#pragma warning(suppress: 6001) // IntelliSense Bug
     *(uintptr_t*)mem = gs_set_viewport;
     
     *(INT32*)(OP + 0x25 + 2) = mem - (OP + 0x25 + 6);
