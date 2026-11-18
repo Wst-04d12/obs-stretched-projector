@@ -85,11 +85,30 @@ end
 function script_description()
     return [[
 <h2>Projector Stretch</h2>
+
 <p>
 Stretch OBS Projectors to fill the entire output area,
 regardless of the canvas aspect ratio.
 </p>
-]]
+
+<hr>
+
+<p>
+<b>Copyright © youmu.site</b>
+</p>
+
+<p>
+License: MPL-2.0
+</p>
+
+<p>
+View source code on 
+<a href="https://github.com/Wst-04d12/obs-stretched-projector">
+GitHub
+</a>.
+</p>
+
+<hr>]]
 end
 
 
